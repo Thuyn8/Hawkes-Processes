@@ -13,19 +13,24 @@ S2 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S2Data.csv") %>%
 S20 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S20Data.csv") %>% 
   select(-c("Date", "Time", "MSec", "Sample")) 
 
-## a.  Two flies didn't interact with S2 food : D6W5, D19W10. 
-## b. All flies interact at least once with S20
+## a.  Two flies didn't interact with S2 food : D6W5, D19W10. Delete them from S2
 sapply(S2, max)
+S2 <- S2[, !(colnames(S2) %in% c("D6W5", "D19W10"))]
+
+## b. All flies interacted at least once with S20
+sapply(S20, max)
 
 ## c. Creating data with threshold >=30
 thres <- 30
-S2_thres <- sapply(S2[, !(colnames(S2) %in% c("D6W5", "D19W10"))],  # rm two flies D6W5, D19W10
-                                 function(i){as.integer(i>=thres)})%>%
+S2_thres <- sapply(S2, function(i){as.integer(i>=thres)})%>%
             as.data.frame() %>% 
-            mutate(Time = 1: nrow(S2)) # create Time column
+            mutate(Time = 1: nrow(S2))
+S2_thres$row_sum <- rowSums(S2_thres[,1:17])
+
 S20_thres <- sapply(S20, function(i){as.integer(i>=thres)}) %>%
             as.data.frame() %>%
             mutate(Time = 1: nrow(S20)) # Create Time column
+S20_thres$row_sum <- rowSums(S20_thres[,1:17])
 
 ## d. creating L2 and L20 data sets including spike times for each fly
 ### sugar 2% (s2)
@@ -60,12 +65,23 @@ rate2 <-lapply(L20, function(i){show_hawkes_GOF(fit_hawkes(times = i, parameters
                                                 return_values = T)$interarrivals})
 
 ## d. plots 
-show_hawkes_GOF(fit_hawkes(times = L2[[1]], parameters = params))
+####show_hawkes_GOF(fit_hawkes(times = L2[[1]], parameters = params))
 
-# 3. Mutually exciting Hawkes process
-## a. 
+## Aggregate Analysis
+### estimate the aggregate intensities and plots
+Agg_S2_thres <- S2_thres$Time[S2_thres$row_sum >0]
+Agg_S20_thres <- S2_thres$Time[S20_thres$row_sum >0]
+
+Agg_intens_rateS2 <-show_hawkes_GOF(fit_hawkes(times = Agg_S2_thres,parameters = params), 
+                plot = F,
+                return_values = T)$interarrivals
+Agg_intens_rate20 <- show_hawkes_GOF(fit_hawkes(times = Agg_S20_thres,parameters = params), 
+                plot = F,
+                return_values = T)$interarrivals
 
 
+show_hawkes(fit_hawkes(times = Agg_S2_thres, parameters = params)) # plot 1
+show_hawkes(fit_hawkes(times = Agg_S20_thres, parameters = params)) # plot 2
 
 #  Read the Social interaction data sets
 ## Control male data
