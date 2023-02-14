@@ -39,94 +39,162 @@ L2 <- lapply(S2_thres[,-ncol(S2_thres)], function(i){S2_thres$Time[i == 1]})
 L20 <-lapply(S20_thres[,-ncol(S20_thres)], function(i){S20_thres$Time[i ==1]})
 
 # 2. Independent Hawkes processes
-## a. Initial parameters
+# a. Initial parameters
 params <- c(mu = 0.05, alpha = 0.05, beta = 1)
 
-
-## b. estimate mu_0, alpha, beta using LH 
-
-est_S2 <-t(do.call(cbind, 
-                   lapply(L2, function(i){
-                     get_coefs(fit_hawkes(times = i, parameters = params))[1:3,1]}))) %>% 
-          as.data.frame()
-
-est_S20 <-t(do.call(cbind,
-                    lapply(L20, function(i){
-                      get_coefs(fit_hawkes(times = i, parameters = params))[1:3,1]}))) %>%
-          as.data.frame()
-
-## c. obtain intensity rates for each fly in each data set
-
-rate2 <- lapply(L2, function(i){show_hawkes_GOF(fit_hawkes(times = i,parameters = params), 
-                                                plot = F,
-                                                return_values = T)$interarrivals})
-rate2 <-lapply(L20, function(i){show_hawkes_GOF(fit_hawkes(times = i, parameters = params),
-                                                plot = F,
-                                                return_values = T)$interarrivals})
-
-## d. plots 
-####show_hawkes_GOF(fit_hawkes(times = L2[[1]], parameters = params))
-
-## Aggregate Analysis
-### estimate the aggregate intensities and plots
-Agg_S2_thres <- S2_thres$Time[S2_thres$row_sum >0]
-Agg_S20_thres <- S2_thres$Time[S20_thres$row_sum >0]
-
-Agg_intens_rateS2 <-show_hawkes_GOF(fit_hawkes(times = Agg_S2_thres,parameters = params), 
-                plot = F,
-                return_values = T)$interarrivals
-Agg_intens_rate20 <- show_hawkes_GOF(fit_hawkes(times = Agg_S20_thres,parameters = params), 
-                plot = F,
-                return_values = T)$interarrivals
+# b. estimate parameters
+## 1. baseline intensity: mu
+## 2. repr:  reproduction mean
+  ## 3. rate: rate of the exponential fertility function
+  
+    est_S2 <-t(do.call(cbind, 
+                       lapply(L2, function(i){
+                         mle(i, end = nrow(S2_thres), init = params, 'Exponential')$par})))
+    
+    
+    colnames(est_S2) <-c('mu','repr','rate') 
+  
+    
+    est_S20 <-t(do.call(cbind, 
+                        lapply(L20, function(i){
+                          mle(i, end = nrow(S20_thres), init = params, 'Exponential')$par})))
+    
+    
+    colnames(est_S20) <-c('mu','repr','rate') 
 
 
-show_hawkes(fit_hawkes(times = Agg_S2_thres, parameters = params)) # plot 1
-show_hawkes(fit_hawkes(times = Agg_S20_thres, parameters = params)) # plot 2
+
+# c. calculate the Conditional intensity of the two datasets 
+# using intensity function from the Hawkesbow package 
+# inputs are estimated parameters, and events vectors
+
+
+    CIF_2 <- vector("list", length(names(S2)))
+    names(CIF_2) <- names(S2)
+    
+    
+    CIF_2 <-lapply(1:17, function(i){
+      intensity(L2[[i]], 1: max(L2[[i]]),
+                fun = est_S2[i,1], 
+                repr = est_S2[i,2] , 
+                family = 'exp',
+                rate = est_S2[i,3])
+    })
+    
+    names(CIF_2) <- names(S2)
+    
+    CIF_20 <- vector("list", length(names(S20)))
+    CIF_20 <- lapply(1:17, function(i){
+      intensity(L20[[i]], 1: max(L20[[i]]),
+                fun = est_S20[i,1], 
+                repr = est_S20[i,2] , 
+                family = 'exp',
+                rate = est_S20[i,3])
+    })
+    
+    names(CIF_20) <- names(S20)
+
+
+
+  ## Aggregate Analysis
+    ### estimate the aggregate intensities and plots
+    Agg_S2_thres <- S2_thres$Time[S2_thres$row_sum >0]
+    Agg_S20_thres <- S2_thres$Time[S20_thres$row_sum >0]
+
+
 
 #  Read the Social interaction data sets
-## Control male data
-control <- read.csv("~/Documents/Hawkes Processes/report/social_interact/ControlMale.csv") 
-dim(control)
-## NPF chrimson Male data
-npf <- read.csv("~/Documents/Hawkes Processes/report/social_interact/NPFChrimsonMale.csv") 
-dim(npf)
+  ## Control male data
+    control <- read.csv("~/Documents/Hawkes Processes/report/social_interact/ControlMale.csv") 
+    
+  ## NPF chrimson Male data
+    npf <- read.csv("~/Documents/Hawkes Processes/report/social_interact/NPFChrimsonMale.csv") 
+  
 
-## convert data to 0 and 1 using  given threshold 8mm
-thres_dist <- 8
+# Exploring data: checking missing data, non-intereacting flies
+  ## check if any flies have no social interaction
+    sapply(control, max, na.rm = T)  >=8
+    sapply(npf, max, na.rm = T)      >=8    
 
-control_h <- sapply(control, function(i){as.integer(i>=thres_dist)}) %>% 
-            as.data.frame() %>% 
-            mutate(Time = 1:nrow(control))
-head(control_h)
+  ## Check missing data and plot the Missing pattern 
+    vis_miss(npf)
+    vis_miss(control)
+    
+  ## convert data to 0 and 1 using  given threshold 8mm
+    thres_dist <- 8
+    
+    control_h <- sapply(control, function(i){ifelse(is.na(i),0, as.integer(i>=thres_dist))}) %>% 
+      as.data.frame() %>% 
+      mutate(Time = 1:nrow(control))
 
-npf_h <- sapply(npf, function(i){as.integer(i>=thres_dist)}) %>% 
-        as.data.frame() %>% 
-        mutate(Time = 1:nrow(npf))
-head(npf_h)
+    npf_h <- sapply(npf, function(i){ifelse(is.na(i),0,as.integer(i>=thres_dist))}) %>% 
+      as.data.frame() %>% 
+      mutate(Time = 1:nrow(npf))
+    
+  
+  ## create hawkes processes's objects
+  control_hwk <- lapply(control_h[,!(colnames(control_h) %in% 'Time')], function(i){control_h$Time[i ==1]})
+  
+  npf_hwk <- lapply(npf_h[, !(colnames(npf_h) %in% 'Time')], function(i){npf_h$Time[i == 1]})
 
-## create hawkes data
-control_hwk <- lapply(control_h[,-ncol(control_h)], function(i){control_h$Time[i ==1]})
-## Check missing data
-sapply(control_hwk, function(i){100*mean(is.na(i))}) %>%signif(3)  # T2L,T4L have NAs
-sapply(npf_h, function(i){100*mean(is.na(i))})%>% signif(3)  # T3R has missing
-## missing pattern plots --> monotone missing pattern
 
-aggr(control, numbers = T, gap = 2,
-     cex.axis = .5,
-     labels = colnames(control),
-     sortVars = T,
-     ylab = c("Histogram of NAs-Control data", "Pattern of missing data"), only.miss = T)
-mtext("Figure 4: Pattern of missing data of Control Male", side =1, line = 7, outer= T )
+## # Permutation test
 
-aggr(npf, numbers = T, gap = 2,
-     cex.axis = .5,
-     labels = colnames(npf),
-     sortVars = T,
-     ylab = c("Histogram of NAs-npf data", "Pattern of missing data"), only.miss = T)
-mtext("Figure 4: Pattern of missing data of Control Male", side =1, line = 7, outer= T )
+## 1. Average function: finds the avg of CIFs 
 
-## check if any flies have no social interaction
-sapply(control, max, na.rm = T) # All flies interacted at least  once 
-sapply(npf, max, na.rm = T)     # All flies interacted at least  once 
+  avg_CIF <- function(CIF_list, weights) {
+    # Find the maximum time points for all CIFs
+      max_time <- max(sapply(CIF_list, function(CIF){length(CIF)}))
+      
+      CIF_max <- which.max(sapply(CIF_list, function(CIF){length(CIF)})) 
+      
+      # Interpolate each CIF to the common time points
+      for (i in names(CIF_list)[-CIF_max]){
+        CIF_list[[i]] <- c(CIF_list[[i]], rep(max(CIF_list[[i]]), max_time- length(CIF_list[[i]])))
+      }
+      
+    # Calculate the weighted average of the interpolated CIFs
+    CIF_avg <- rowMeans(do.call(cbind, CIF_list) * weights) 
+    return(CIF_avg)
+    
+  }
 
-## create 
+#test
+
+  avg_CIF(CIF_2, 1) 
+  avg_CIF(CIF_20,1) 
+
+## observed_statistics: MSE of two curves
+
+# observed statisitics:
+  obs_statistics <- function(x,y){
+    n1 = length(x)
+    n2 = length(y)
+    if (n1> n2) {y <- c(y, rep(0, n1-n2))}
+    else {x <- c(x, rep(0, n2-n1))}
+    mse = (x-y)^2
+    return(mse)
+}
+
+## 2. permutation
+
+  obs_statistics <- obs_statistics(dat1, dat2)
+  #combine two lists, called data
+  index <- 1: (ncol(dat1) + ncol(dat2)) 
+  data <- c(dat1, dat2)
+  num_permutations <- 1000
+  
+  # create permuted data
+  permuted_dat <- lapply(1: num_permutations, function(i){
+    sample(index)
+  })
+  
+  permuted_stat <- sapply(permuted_dat, function(i){
+    dat1 <- data[,i[1:length(i)/2]]
+    dat2 <- data[,-i[1:length(i)/2]]
+    avg_CIF(dat1) -avg_CIF(dat2)
+  })
+  
+  p-value <- mean(permuted_stat >= obs_statistics)
+
+
