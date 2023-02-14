@@ -6,41 +6,41 @@ library(VIM)
 library(hawkesbow)
 
 # 1. Loading  the two feeding datasets
-S2 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S2Data.csv") %>% 
-  select(-c("Date", "Time", "MSec", "Sample")) 
+  S2 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S2Data.csv") %>% 
+    select(-c("Date", "Time", "MSec", "Sample")) 
+  
+  
+  S20 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S20Data.csv") %>% 
+    select(-c("Date", "Time", "MSec", "Sample")) 
 
+  ## a.  Two flies didn't interact with S2 food : D6W5, D19W10. Delete them from S2
+    sapply(S2, max)
+    S2 <- S2[, !(colnames(S2) %in% c("D6W5", "D19W10"))]
 
-S20 <- read.csv("~/Documents/Hawkes Processes/report/feeding/S20Data.csv") %>% 
-  select(-c("Date", "Time", "MSec", "Sample")) 
+  ## b. All flies interacted at least once with S20
+    sapply(S20, max)
 
-## a.  Two flies didn't interact with S2 food : D6W5, D19W10. Delete them from S2
-sapply(S2, max)
-S2 <- S2[, !(colnames(S2) %in% c("D6W5", "D19W10"))]
+  ## c. Creating data with threshold >=30
+    thres <- 30
+    S2_thres <- sapply(S2, function(i){as.integer(i>=thres)})%>%
+                as.data.frame() %>% 
+                mutate(Time = 1: nrow(S2))
+    S2_thres$row_sum <- rowSums(S2_thres[,1:17])
+    
+    S20_thres <- sapply(S20, function(i){as.integer(i>=thres)}) %>%
+                as.data.frame() %>%
+                mutate(Time = 1: nrow(S20)) # Create Time column
+    S20_thres$row_sum <- rowSums(S20_thres[,1:17])
 
-## b. All flies interacted at least once with S20
-sapply(S20, max)
-
-## c. Creating data with threshold >=30
-thres <- 30
-S2_thres <- sapply(S2, function(i){as.integer(i>=thres)})%>%
-            as.data.frame() %>% 
-            mutate(Time = 1: nrow(S2))
-S2_thres$row_sum <- rowSums(S2_thres[,1:17])
-
-S20_thres <- sapply(S20, function(i){as.integer(i>=thres)}) %>%
-            as.data.frame() %>%
-            mutate(Time = 1: nrow(S20)) # Create Time column
-S20_thres$row_sum <- rowSums(S20_thres[,1:17])
-
-## d. creating L2 and L20 data sets including spike times for each fly
-### sugar 2% (s2)
-L2 <- lapply(S2_thres[,-ncol(S2_thres)], function(i){S2_thres$Time[i == 1]})
-### sugar 20% (s20)
-L20 <-lapply(S20_thres[,-ncol(S20_thres)], function(i){S20_thres$Time[i ==1]})
+  ## d. creating L2 and L20 data sets including spike times for each fly
+  ### sugar 2% (s2)
+    L2 <- lapply(S2_thres[,-ncol(S2_thres)], function(i){S2_thres$Time[i == 1]})
+  ### sugar 20% (s20)
+    L20 <-lapply(S20_thres[,-ncol(S20_thres)], function(i){S20_thres$Time[i ==1]})
 
 # 2. Independent Hawkes processes
 # a. Initial parameters
-params <- c(mu = 0.05, alpha = 0.05, beta = 1)
+  params <- c(mu = 0.05, alpha = 0.05, beta = 1)
 
 # b. estimate parameters
 ## 1. baseline intensity: mu
